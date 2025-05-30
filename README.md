@@ -1,5 +1,3 @@
-Posting my methodology and implementation details for Assignment 1. Behooves me to reinforce this but everyone in this class is fantastic and it's been great to get to know some of y'all! Hopefully, this helps someone (although I think the resources I used to optimize my models and some of the advanced models that I used may not have sufficient pragmatic use in the industry due to scalability, funding constraints, business need, etc.)
-
 ## Final Results (ranks mentioned are on the 258 Gradescope leaderboard)
 
 - **Rating Prediction (Public)**: **1.399998740354906** (Rank 1)
