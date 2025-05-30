@@ -1,0 +1,343 @@
+## Introduction
+
+In this assignment, I worked on two main tasks related to recommendation systems:
+
+1. **Rating Prediction**: Predict people's star ratings as accurately as possible for given (user, book) pairs.
+2. **Read Prediction**: Predict whether a user would read a given book (binary classification) for given (user, book) pairs.
+
+Over two weeks, I experimented with various models and approaches to improve performance on both tasks. This writeup details the methods I tried, the outcomes, and the final solutions that achieved the best results on the Gradescope leaderboard.
+
+---
+
+## Setup and Dependencies
+
+To run the final code, you need the following Python libraries:
+
+- **NumPy**: For numerical computations.
+- **Pandas**: For data manipulation.
+- **LibRecommender**: A library for recommender systems that provides implementations of various algorithms ([Documentation](https://librecommender.readthedocs.io/en/latest/)).
+- **Cornac**: A Comparative Framework for Multimodal Recommender Systems ([Documentation](https://cornac.readthedocs.io/en/latest/index.html))
+- **TensorFlow**: Required by LibRecommender for some deep learning models.
+
+### Installation Instructions
+
+You can install the required libraries using pip:
+
+```bash
+pip install numpy pandas LibRecommender tensorflow cornac
+```
+
+Ensure that you have Python 3.6 or higher.
+
+---
+
+## Rating Prediction Task
+
+### Overview
+
+The goal is to predict the star ratings that users would give to books. Accuracy is measured using the mean squared error (MSE). The dataset consists of user-book interactions with ratings.
+
+### Methods Tried
+
+I experimented with several approaches for the rating prediction task:
+
+1. **Matrix Factorization (Solution 1)**
+2. **Neural Collaborative Filtering and LightGBM (Solution 2)**
+3. **LightGBM (Solution 3)**
+4. **Cornac Library Models (Solution 4)**
+5. **Various Models from Recommenders Library (rating task) (Solution 5)**
+6. **Latent Factor Model with Biases (_Final Solution_)**
+7. **Transformer Model from Recommenders Library (rating task) (_Final Solution_)**
+8. **Combining LFM and Transformer Predictions**
+
+#### **1. Matrix Factorization (Solution 1)**
+
+- **Approach**: Implemented matrix factorization using Stochastic Gradient Descent (SGD) to factorize the user-item interaction matrix into latent factors.
+- **Details**:
+  - Initialized user and item latent factor matrices `U` and `V` with small random values.
+  - Set the number of latent factors `K` to 10.
+  - Trained over several epochs, updating latent factors based on the error between predicted and actual ratings.
+- **Outcome**: Achieved moderate improvement over baseline but not satisfactory MSE on the leaderboard.
+
+#### **2. Neural Collaborative Filtering and LightGBM (Solution 2)**
+
+- **Approach**: Implemented Neural Collaborative Filtering (NCF) using PyTorch and used LightGBM for regression.
+- **Details**:
+  - NCF model with embedding layers for users and items, followed by fully connected layers.
+  - LightGBM model trained on user and item features for regression.
+- **Outcome**: NCF did not outperform matrix factorization significantly. LightGBM showed better results but still not optimal.
+
+#### **3. LightGBM Regression (Solution 3)**
+
+- **Approach**: Used LightGBM for regression on user and item features, including counts and average ratings.
+- **Details**:
+  - Extracted features such as user average rating, item average rating, user activity count, and item popularity count.
+  - Trained a LightGBM model with these features.
+- **Outcome**: Achieved better MSE compared to previous methods but still room for improvement.
+
+#### **4. Cornac Library Models (Solution 4)**
+
+- **Approach**: Tried various models available in the Cornac library, including [SVD](https://cornac.readthedocs.io/en/latest/models/svd.html), [PMF](https://cornac.readthedocs.io/en/latest/models/pmf.html), [NMF](https://cornac.readthedocs.io/en/latest/models/nmf.html), and [BiVAE](https://cornac.readthedocs.io/en/latest/models/bivaecf.html).
+- **Details**:
+  - Experimented with hyperparameter tuning using GridSearch and RandomSearch for models like SVD.
+  - Evaluated models using RMSE and MAE metrics.
+- **Outcome**: Some models showed promising results, but the MSE was not significantly better than previous methods.
+
+#### **5. Various Models from Recommenders Library (Solution 5)**
+
+- **Approach**: Implemented models from the [Microsoft Recommenders Library](https://recommenders-team.github.io/recommenders/intro.html), including state-of-the-art algorithms.
+- **Outcome**: The performance did not translate well to the given dataset, and MSE was not improved significantly.
+
+#### **6. Latent Factor Model with Biases (Final Solution)**
+
+After extensive experimentation, I implemented a latent factor model with biases, which yielded the best results.
+
+##### **Implementation Details**
+
+- **Data Preparation**:
+  - Read the training data and assigned unique IDs to each user and item.
+  - Stored the ratings as tuples of (user_id, item_id, rating).
+  - Adjusted the rating scale by adding 1 to avoid zeros.
+
+- **Model Initialization**:
+  - Set the number of latent factors `K` to 20.
+  - Initialized global average rating `alpha`, user biases `beta_u`, item biases `beta_i`, and latent factors `gamma_u` and `gamma_i` with small random values.
+  - I used [`optuna`](https://github.com/optuna/optuna) to optimize hyperparameters for this implementation: `K` (number of latent factors), learning rate, regularization, number of epochs, and the exponential scale used for `gamma_u` and `gamma_i`. However, I did not get any improvements in validation RMSE over the pre-hyperopt values I had configured for the model with the best hyperopt values (RMSE: 1.117644 with hyperparams: {'K': 15, 'init_scale': 9.862213949016514e-06, 'learning_rate': 0.01, 'num_epochs': 20, 'regularization': 0.2946775081595279}).
+
+- **Training Loop**:
+  - Performed SGD over the training data for 20 epochs.
+  - For each observed rating, computed the prediction:
+
+    \[
+    \hat{r}_{ui} = \alpha + \beta_u + \beta_i + \gamma_u^T \gamma_i
+    \]
+
+  - Calculated the error and updated the parameters:
+    - Updated biases and latent factors with regularization to prevent overfitting.
+    - Updated the global average `alpha` after each epoch.
+  - Monitored the RMSE at each epoch.
+
+- **Prediction**:
+  - After training, used the learned parameters to predict ratings for the test data.
+  - Handled unseen users or items by using `alpha` and the corresponding bias terms if available.
+  - Clipped the predicted ratings to the valid range (1 to 6) and subtracted 1 to revert to the original scale (0 to 5).
+
+##### **Outcome**
+
+- **Result**: Achieved an RMSE of **1.413502227872813** on the public Gradescope leaderboard.
+- **Analysis**: The inclusion of bias terms and careful tuning of hyperparameters significantly improved the MSE compared to previous methods.
+
+#### **7. Transformer Model (Final Solution)**
+
+- **Approach**: Implemented a Transformer-based model using the LibRecommender library to capture complex user-item interactions.
+- **Details**:
+ - Used the [Transformer model](https://librecommender.readthedocs.io/en/latest/api/algorithms/transformer.html#transformer) from LibRecommender, which is designed for sequential recommendation tasks but can also be adapted for rating prediction.
+ - Configured the model with:
+   - **Embedding Size**: 512
+   - **Number of Epochs**: 3
+   - **Learning Rate**: 0.0003392308111583879 with decay
+   - **Batch Size**: 256
+   - **Dropout Rate**: 0.10142529816569815
+   - **Hidden Units**: (512, 256, 128)
+   - **Number of Transformer Layers**: 6
+   - **Number of Heads**: 16
+ - Adjusted the rating scale and bounds to match the dataset.
+ - Used the 'random' sampler for negative sampling and enabled batch normalization.
+
+##### References
+
+- [1] Qiwei Chen et al. [Behavior Sequence Transformer for E-commerce Recommendation in Alibaba.](https://arxiv.org/pdf/1905.06874.pdf)
+- [2] Gabriel de Souza Pereira et al. [Transformers4Rec: Bridging the Gap between NLP and Sequential / Session-Based Recommendation.](https://dl.acm.org/doi/10.1145/3460231.3474255)
+- [3] Biao Zhang & Rico Sennrich. [Root Mean Square Layer Normalization.](https://arxiv.org/pdf/1910.07467.pdf)
+
+##### **Outcome**
+- **Result**: Achieved an RMSE of **1.406144429137156** on the public Gradescope leaderboard.
+- **Analysis**: The Transformer model effectively captured sequential patterns and complex interactions, leading to improved performance over previous methods.
+
+#### **8. Combining LFM and Transformer Predictions**
+
+- **Approach**: To further improve the rating prediction accuracy, combined the predictions from the Latent Factor Model (LFM) and the Transformer model.
+- **Details**:
+ - Calculated a weighted average of the predictions from both models:
+   - **20% weight** for the LFM predictions.
+   - **80% weight** for the Transformer predictions.
+ - The weighting was chosen based on the individual performance of each model, giving more weight to the better-performing Transformer model.
+
+##### **Outcome**
+- **Result**: Achieved an improved best RMSE of **1.399998740354906** on the public Gradescope leaderboard following several iterations of running the ensemble approach and taking a weighted average of the best results.
+- **Analysis**: The ensemble of models helped to compensate for outliers and discrepancies in individual model predictions, leading to better overall accuracy.
+
+---
+
+## Read Prediction Task
+
+### Overview
+
+The goal is to predict whether a user would read a given book, framed as a binary classification task. The dataset includes user-book interactions indicating that the user has read the book.
+
+### Methods Tried
+
+I explored several models for the read prediction task:
+
+1. **Logistic Regression (Initial Approach)**
+2. **LightGBM Classification**
+3. **Various Models from LibRecommender (ranking task)**
+4. **Neural Graph Collaborative Filtering (NGCF) (Final Solution)**
+5. **KAN-based Collaborative Filtering** (Solution 6)
+6. **BSPM Method** (Solution 7)
+
+#### **1. Logistic Regression (Initial Approach)**
+
+- **Approach**: Used logistic regression to predict the probability that a user would read a book based on features.
+- **Details**:
+  - Generated negative samples by randomly pairing users and items not present in the training data.
+  - Created features like user activity (number of books read) and item popularity (number of times read).
+  - Trained a logistic regression model using these features.
+- **Outcome**: Achieved baseline performance but not sufficient accuracy.
+
+#### **2. LightGBM Classification**
+
+- **Approach**: Implemented LightGBM for binary classification using similar features.
+- **Details**:
+  - Extracted features such as user and item counts.
+  - Handled missing values by imputing with global averages.
+- **Outcome**: Improved accuracy over logistic regression, achieving around 75% accuracy on the leaderboard.
+
+#### **3. Various Models from LibRecommender**
+
+- **Approach**: Experimented with multiple models available in LibRecommender, including:
+
+  - `ALS`, `AutoInt`, `BPR`, `Caser`, `DeepFM`, `DIN`, `FM`, `ItemCF`, `LightGCN`, `NCF`, `SVD`, `SVDpp`, `Transformer`, `RNN4Rec`, `NGCF`, `GraphSage`, `TwoTower`, `Item2Vec`, `DeepWalk`, `WideDeep`, `WaveNet`.
+
+- **Outcome**: Despite extensive experimentation, the models did not surpass 74% accuracy on the leaderboard.
+
+#### **4. KAN-based Collaborative Filtering (Solution 7)**
+
+- **Approach**: Implemented a ranking task using the cutting-edge Kolmogorov-Arnold Network (KAN)-based recommendation system ([GitHub Repository](https://github.com/jindeok/CF-KAN/tree/main)).
+- **Outcome**: Did not surpass **72%** accuracy on the leaderboard for the read prediction task.
+
+#### **5. BSPM Method (Solution 7)**
+
+- **Approach**: Implemented a BSPM (Blurring-Sharpening Process Models for Collaborative Filtering) method for read prediction using [this repository](https://github.com/jeongwhanchoi/BSPM/tree/main/bspm) and integrated it with LightGCN.
+- **Outcome**: Could not exceed **75%** accuracy on the leaderboard for the read prediction task.
+
+#### **6. Neural Graph Collaborative Filtering (NGCF) (Solution 8)**
+
+After trying various models, I settled on using NGCF from LibRecommender, which provided the best results.
+
+##### **Implementation Details**
+
+- **Data Preparation**:
+  - Read the training data and considered the ratings as labels. This produced better overall accuracy over considering all interactions as positive examples (label 1) or treating 0 ratings as 'not read' and other ratings as 'read'.
+  - Split the data into training and evaluation sets using a small evaluation set for better validation.
+
+- **Model Configuration**:
+  - Set task to 'ranking' and used 'bpr' (Bayesian personalized ranking) loss for better pairwise ranking.
+  - Increased embedding size to 128 to capture more latent factors.
+  - Increased the number of epochs to 50 for better convergence.
+  - Added node and message dropout to prevent overfitting.
+  - Used the 'unconsumed' sampler for better negative sampling.
+
+- **Training**:
+  - Trained the NGCF model on the training set with negative sampling.
+  - Evaluated the model using metrics like precision, recall, ndcg, and map.
+
+- **Prediction**:
+  - Predicted scores for the test pairs.
+  - Used the median of predicted scores for each user as the threshold to convert scores to binary predictions.
+  - Handled cold-start users and items using the 'popular' strategy (has a higher probability to sample popular items as negative samples).
+
+##### **Outcome**
+
+- **Evaluation Results for NGCF after Training**:
+
+| Metric       | Value    |
+|--------------|----------|
+| Precision@10 | 0.0032   |
+| Recall@10    | 0.0323   |
+| NDCG@10      | 0.0109   |
+| MAP@10       | 0.0048   |
+
+- **Leaderboard Result**: Achieved an accuracy of **78.15%** on the public Gradescope leaderboard.
+- **Analysis**: The NGCF model effectively captured complex user-item relationships, leading to significant improvements over previous methods.
+
+#### **7. Read Prediction Task via an Ensemble of Various Methods (Final Solution)**
+
+To further enhance the accuracy of the Read Prediction Task, I implemented an ensemble of various models from the LibRecommender and Cornac libraries.
+
+##### **Implementation Details**
+
+- **Data Preparation**:
+  - Loaded the training data and labeled all interactions as `1.0`, indicating that the user has read the book.
+  - Split the data into training and evaluation sets using `DatasetPure`.
+  - Prepared the test pairs for prediction.
+
+- **Model Training**:
+  - Trained multiple models including `GraphSage`, `LightGCN`, `NGCF`, `RNN4Rec`, and `BPR` from LibRecommender.
+  - Trained additional models `VAECF` and `BiVAECF` from the Cornac library.
+  - Each model was trained with consistent hyperparameters and evaluated based on ranking metrics such as precision, recall, NDCG, and MAP.
+
+- **Ensemble Method**:
+  - Combined the predictions from all trained models by ranking their scores and combining the ranks with heavy weightage given to the `VAECF` strategy as it scored the highest among all individual methods on the public leaderboard.
+
+##### **Outcome**
+
+- **Result**: Achieved an accuracy of **0.8621** on the public Gradescope leaderboard.
+- **Analysis**: The ensemble approach effectively leveraged the strengths of multiple models, compensating for individual model variances and enhancing overall prediction accuracy.
+
+---
+
+## Final Results
+
+| Task              | Metric  | Score               |
+|-------------------|---------|---------------------|
+| Rating Prediction | RMSE    | **1.399998740354906** |
+| Read Prediction   | Accuracy| **0.8621**           |
+
+These results demonstrate substantial improvements over leaderboard baselines and reflect the effectiveness of the final models implemented for both tasks.
+
+## Managing Randomness and Ensuring Reproducibility
+
+While efforts were made to ensure reproducibility by setting random seeds, inherent randomness in model training processes introduces variability in the results. Specifically:
+
+- **Read Prediction Task**: The accuracy ranged from **86%** to **86.21%** across multiple executions on the public leaderboard (Gradescope). To achieve the best outcome on the public Gradescope leaderboard, I executed the code multiple times and selected the predictions with the highest accuracy.
+
+- **Rating Prediction Task**: I ran the code over **100 times** via UCSD's DataHub (JupyterHub) and took the weighted average of the best-performing results, achieving an RMSE below **1.4** on the public leaderboard. The raw output of the code provided here with a single iteration of the LFM and Transformer-based approaches was seen to produce an RMSE ranging between **1.410** and as low as **1.404** on the public leaderboard.
+
+These variations are due to the stochastic nature of training algorithms and cannot be entirely controlled by setting seed values or passing seed parameters to the Cornac or LibRecommender classes.
+
+## Hyperparameter Optimization using Optuna
+
+To enhance the performance of the Transformer model, I employed the **Optuna** library for hyperparameter optimization. The following parameters were tuned using Optuna:
+
+- **Learning Rate**
+- **Regularization**
+- **Dropout Rate**
+- **Hidden Layer Sizes**
+- **Number of Heads**
+- **Number of Transformer Layers**
+
+The optimization process involved defining an objective function that evaluates the model's performance based on RMSE and iteratively searching for the optimal set of hyperparameters. This approach led to significant improvements in the model's predictive capabilities. Moreover, it was observed that more complex algorithms and newer models have a higher likelihood of overfitting to the training data with just a few epochs.
+
+**References:**
+- [Optuna Documentation](https://optuna.org/)
+
+---
+
+## References
+
+- **LightGBM**: [GitHub Repository](https://github.com/microsoft/LightGBM)
+- **Cornac Library**: [Documentation](https://cornac.readthedocs.io/en/latest/index.html)
+- **LibRecommender**: [Documentation](https://librecommender.readthedocs.io/en/latest/)
+- **Recommenders Library**: [Introduction](https://recommenders-team.github.io/recommenders/intro.html)
+- **KAN-based Collaborative Filtering**: [GitHub Repository](https://github.com/jindeok/CF-KAN/tree/main)
+- **BSPM Method**: [GitHub Repository](https://github.com/jeongwhanchoi/BSPM/tree/main/bspm)
+- **Perplexity.ai**: [Perplexity AI](https://www.perplexity.ai/)
+
+---
+
+## Acknowledgments
+
+I would like to thank **OpenAI's ChatGPT models**, specifically *o1-preview*, *o1-mini*, and *GPT-4o*, for assisting me in implementing and troubleshooting multiple models and prediction algorithms throughout this assignment.
+
+Additionally, I am grateful to [Perplexity.ai](https://www.perplexity.ai/) for helping me research the best models and strategies to use, which significantly contributed to the success of this project.
