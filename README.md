@@ -1,4 +1,4 @@
-## Final Results (ranks mentioned are on the 258 Gradescope leaderboard)
+## Final Results (ranks mentioned are on the 258 Gradescope leaderboard, out of 737 students)
 
 - **Rating Prediction (Public)**: **1.399998740354906** (Rank 1)
 - **Rating Prediction (Private)**: **1.45064734344175** (Rank 3)
