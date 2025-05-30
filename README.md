@@ -1,3 +1,5 @@
+## [Link to Competition Guidelines](https://cseweb.ucsd.edu/classes/fa24/cse258-b/files/assignment1.pdf) 
+
 ## Final Results (ranks mentioned are on the 258 Gradescope leaderboard; 737 students participated in the competition)
 
 - **Rating Prediction (Public)**: **1.399998740354906** (Rank 1)
